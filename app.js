@@ -38,9 +38,104 @@
     } catch (e) { console.warn('Could not load data', e); }
     return blank();
   }
-  function save() {
+  function saveLocal() {
+    if (remote) return;
     try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
-    catch (e) { toast('⚠️ Could not save — storage is full or blocked'); }
+    catch (e) { toast('⚠️ Could not save. Storage is full or blocked.'); }
+  }
+
+  /* ---------- shared database (when opened as a claude.ai artifact) ----------
+     Each order, tab and payment is its own document, so several phones can
+     ring up orders at once. Falls back to this browser's storage elsewhere. */
+  let remote = null;
+  const COLLS = ['orders', 'tabs', 'tabPayments'];
+  const queues = {};
+  const clone = o => JSON.parse(JSON.stringify(o));
+  function writeFailed(e) {
+    console.warn('write failed', e);
+    toast(e && e.code === 'invalid_argument'
+      ? 'You can view this register but not change it'
+      : e && e.code === 'quota_exceeded' ? 'Storage is full. Erase old data in Settings.' : 'Could not save. Check your connection.');
+  }
+  // one write at a time per document
+  function queueWrite(path, fn) {
+    queues[path] = (queues[path] || Promise.resolve()).then(fn).catch(writeFailed);
+    return queues[path];
+  }
+  function save(kind, obj) {
+    saveLocal();
+    if (!remote || !kind) return;
+    if (kind === 'menu') {
+      const data = { items: clone(db.menu) };
+      return queueWrite('config/menu', () => remote.doc('config/menu').set(data));
+    }
+    const data = clone(obj);
+    return queueWrite(kind + '/' + obj.id, () => remote.collection(kind).doc(obj.id).set(data));
+  }
+  function removeDoc(kind, id) {
+    saveLocal();
+    if (remote) return queueWrite(kind + '/' + id, () => remote.collection(kind).doc(id).delete());
+  }
+  async function replaceAll() {
+    saveLocal();
+    if (!remote) return;
+    setSync('Saving…');
+    try {
+      for (const c of COLLS) {
+        const snap = await remote.collection(c).get();
+        const keep = new Set(db[c].map(x => x.id));
+        for (const d of snap.docs) if (!keep.has(d.id)) await remote.collection(c).doc(d.id).delete();
+        for (const x of db[c]) await remote.collection(c).doc(x.id).set(clone(x));
+      }
+      await remote.doc('config/menu').set({ items: clone(db.menu) });
+      setSync('Synced');
+    } catch (e) { writeFailed(e); }
+  }
+  function setSync(text, title) {
+    const el = $('#syncState');
+    el.textContent = text;
+    el.title = title || '';
+    el.dataset.state = text === 'Synced' ? 'ok' : text === 'This device only' ? 'local' : 'wait';
+  }
+  async function connect() {
+    const use = window.claude && window.claude.use;
+    if (!use) { setSync('This device only', 'Saved in this browser. Download backups in Settings.'); return; }
+    setSync('Connecting…');
+    let ns = null;
+    try { ns = await window.claude.use('db'); } catch { ns = null; }
+    if (!ns) { setSync('This device only', 'Saved in this browser. Sign in to sync across devices.'); return; }
+    remote = ns;
+    const confirmed = new Set();
+    const timer = setTimeout(() => { if (confirmed.size < 4) setSync('Offline', 'Can\'t reach saved data yet. Changes will sync when back online.'); }, 10000);
+    const ok = key => (snap) => {
+      if (!snap.metadata.fromCache) confirmed.add(key);
+      if (confirmed.size === 4) { clearTimeout(timer); setSync('Synced', 'Saved online. Open this link on any device.'); }
+    };
+    const fail = e => { clearTimeout(timer); setSync('Offline', e && e.message); };
+    for (const c of COLLS) {
+      remote.collection(c).onSnapshot(snap => {
+        db[c] = snap.docs.map(d => clone(d.data()));
+        ok(c)(snap);
+        rerender();
+      }, fail);
+    }
+    remote.doc('config/menu').onSnapshot(snap => {
+      const items = snap.exists && snap.data().items;
+      db.menu = Array.isArray(items) && items.length ? clone(items) : DEFAULT_MENU.map(m => ({ ...m }));
+      ok('menu')(snap);
+      rerender();
+    }, fail);
+  }
+  let rerenderPending = false;
+  function rerender() {
+    if (rerenderPending) return;
+    rerenderPending = true;
+    requestAnimationFrame(() => {
+      rerenderPending = false;
+      // don't redraw the menu editor under someone's fingers
+      if (ui.view === 'settings' && $('#menuEditor').contains(document.activeElement)) { renderActiveCount(); return; }
+      render();
+    });
   }
 
   /* ---------- helpers ---------- */
@@ -239,7 +334,7 @@
       cancelled: false,
     };
     db.orders.push(order);
-    save();
+    save('orders', order);
     resetCart();
     renderActiveCount();
     toast(`Order #${no} placed` + (tabId ? ` on ${tabById(tabId).name}'s tab` : payment ? ' — paid' : ' — not paid yet'));
@@ -331,7 +426,7 @@
       o.cancelled = true;
     }
     if (act === 'restore') o.cancelled = false;
-    save();
+    save('orders', o);
     render();
   }
   document.addEventListener('click', e => {
@@ -429,7 +524,7 @@
       const p = db.tabPayments.find(x => x.id === del.dataset.delpay);
       if (p && await confirmDialog(`Undo the ${peso(p.amount)} payment?`, 'Undo payment')) {
         db.tabPayments = db.tabPayments.filter(x => x !== p);
-        save(); renderTabs();
+        removeDoc('tabPayments', p.id); renderTabs();
       }
       return;
     }
@@ -446,8 +541,9 @@
       const bal = tabLedger(t.id).balance;
       const p = await payDialog(bal, `Payment from ${t.name}`, false, true);
       if (!p) return;
-      db.tabPayments.push({ id: uid(), tabId: t.id, amount: p.amount, method: p.method, at: Date.now() });
-      save(); renderTabs();
+      const pay = { id: uid(), tabId: t.id, amount: p.amount, method: p.method, at: Date.now() };
+      db.tabPayments.push(pay);
+      save('tabPayments', pay); renderTabs();
       const nb = tabLedger(t.id).balance;
       toast(nb > 0 ? `Got ${peso(p.amount)} — ${t.name} still owes ${peso(nb)}` : `${t.name}'s tab is fully settled 🎉`);
     }
@@ -456,11 +552,11 @@
         { key: 'name', label: 'Name', value: t.name, required: true },
         { key: 'phone', label: 'Phone / note', value: t.phone || '' },
       ], 'Save');
-      if (r) { t.name = r.name; t.phone = r.phone; save(); renderTabs(); }
+      if (r) { t.name = r.name; t.phone = r.phone; save('tabs', t); renderTabs(); }
     }
     if (act === 'archive') {
       if (await confirmDialog(`Close ${t.name}'s tab? Their history stays in Sales and Orders.`, 'Close tab')) {
-        t.archived = true; ui.selectedTab = null; save(); renderTabs();
+        t.archived = true; ui.selectedTab = null; save('tabs', t); renderTabs();
       }
     }
   });
@@ -475,7 +571,7 @@
     if (existing) { toast(`${existing.name} already has a tab`); return existing; }
     const t = { id: uid(), name: r.name, phone: r.phone, createdAt: Date.now(), archived: false };
     db.tabs.push(t);
-    save();
+    save('tabs', t);
     toast(`Tab opened for ${t.name}`);
     return t;
   }
@@ -539,7 +635,7 @@
     const k = e.target.dataset.k;
     if (k === 'price') m.price = Math.max(0, parseFloat(e.target.value) || 0);
     else m[k] = e.target.value.trim() || m[k];
-    save();
+    save('menu');
     toast('Menu saved');
   });
   $('#menuEditor').addEventListener('click', async e => {
@@ -549,17 +645,26 @@
     if (await confirmDialog(`Remove “${m.name}” from the menu?`, 'Remove')) {
       db.menu.splice(+b.dataset.del, 1);
       delete ui.cart[m.id];
-      save(); renderSettings();
+      save('menu'); renderSettings();
     }
   });
   $('#addMenuItem').addEventListener('click', () => {
     db.menu.push({ id: uid(), cat: db.menu.at(-1)?.cat || 'Food', name: 'New item', price: 0 });
-    save(); renderSettings();
+    save('menu'); renderSettings();
     const inputs = $$('#menuEditor .menu-row:last-child input');
     inputs[1]?.select();
   });
-  $('#exportBtn').addEventListener('click', () => {
+  $('#exportBtn').addEventListener('click', async () => {
     const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+    const filename = `ledgr-backup-${dayKey(Date.now())}.json`;
+    if (window.claude && window.claude.use) {
+      const dl = await window.claude.use('downloads').catch(() => null);
+      if (dl) {
+        try { await dl.save({ filename, data: blob }); }
+        catch (e) { if (e && e.code !== 'declined') toast('Could not download the backup here'); }
+        return;
+      }
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `ledgr-backup-${dayKey(Date.now())}.json`;
@@ -575,13 +680,13 @@
       if (!Array.isArray(d.orders) || !Array.isArray(d.menu)) throw new Error('bad file');
       if (!(await confirmDialog('Replace everything on this device with this backup?', 'Restore'))) return;
       db = { ...blank(), ...d };
-      save(); toast('Backup restored'); render();
+      await replaceAll(); toast('Backup restored'); render();
     } catch { toast('That file is not a Ledgr backup'); }
   });
   $('#resetBtn').addEventListener('click', async () => {
     if (!(await confirmDialog('Erase ALL orders, tabs and payments? Download a backup first if unsure.', 'Erase everything'))) return;
     db = blank(); ui.cart = {}; ui.selectedTab = null;
-    save(); toast('All data erased'); render();
+    await replaceAll(); toast('All data erased'); render();
   });
 
   /* ---------- dialogs ---------- */
@@ -682,4 +787,5 @@
 
   /* ---------- boot ---------- */
   render();
+  connect();
 })();
