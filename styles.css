@@ -1,11 +1,15 @@
 :root {
-  --bg: #fffaf0;
+  --bg: #fff7e8;
   --surface: #ffffff;
   --text: #2b2a26;
   --muted: #7a756a;
   --line: #ece4d3;
-  --accent: #f4c430;
-  --accent-ink: #3a2f00;
+  --accent: #fdb913;      /* Mojo yellow */
+  --accent-ink: #1a1208;
+  --orange: #f26a1b;      /* Dojo orange */
+  --brand-red: #c8302a;   /* banner red */
+  --ink: #1a1208;         /* logo outline */
+  --display: "Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
   --green: #2e9b5b;
   --green-bg: #e3f5ea;
   --red: #c8432f;
@@ -54,7 +58,8 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 button, input, select { font: inherit; color: inherit; }
-h2 { font-size: 1.15rem; margin: 0 0 12px; }
+h2, h3, .order-no, .balance, .big-total, .cart-total strong { font-family: var(--display); font-weight: 400; letter-spacing: .01em; }
+h2 { font-size: 1.4rem; margin: 0 0 12px; }
 .mt { margin-top: 32px; }
 .muted { color: var(--muted); }
 .small { font-size: .875rem; }
@@ -64,22 +69,25 @@ h2 { font-size: 1.15rem; margin: 0 0 12px; }
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
   display: flex; align-items: center; gap: 16px;
   padding: 8px 16px;
-  background: var(--accent); color: var(--accent-ink);
+  background: var(--ink); color: #fff3d6;
+  border-bottom: 4px solid var(--orange);
   overflow-x: auto;
 }
-.brand { font-weight: 800; font-size: 1.2rem; white-space: nowrap; }
+.brand { height: 56px; width: auto; display: block; flex: none; }
 .tabs { display: flex; gap: 4px; }
 .tabs button {
-  border: 0; background: transparent; color: var(--accent-ink);
+  border: 0; background: transparent; color: #fff3d6;
   padding: 10px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap; font-weight: 600;
 }
-.tabs button.active { background: rgba(255,255,255,.65); }
-.sync { margin-left: auto; white-space: nowrap; font-size: .8rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.55); }
-.sync::before { content: "●"; margin-right: 5px; color: #b08900; }
-.sync[data-state=ok]::before { color: #1f7a45; }
-.sync[data-state=local]::before { color: #6b6658; }
+.tabs button.active { background: var(--accent); color: var(--ink); }
+.tabs button:not(.active):hover { background: rgba(255,255,255,.1); }
+.sync { margin-left: auto; white-space: nowrap; font-size: .8rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.1); color: #fff3d6; }
+.sync::before { content: "●"; margin-right: 5px; color: var(--accent); }
+.sync[data-state=ok]::before { color: #4cd286; }
+.sync[data-state=local]::before { color: #a39d8f; }
 .sync:empty { display: none; }
-.pill { display: inline-block; min-width: 1.4em; padding: 0 6px; border-radius: 999px; background: var(--accent-ink); color: var(--accent); font-size: .8rem; text-align: center; }
+.pill { display: inline-block; min-width: 1.4em; padding: 0 6px; border-radius: 999px; background: var(--orange); color: #fff; font-size: .8rem; text-align: center; }
+.tabs button.active .pill { background: var(--ink); color: var(--accent); }
 .pill:empty { display: none; }
 
 main { padding: 16px; max-width: 1200px; margin: 0 auto; }
@@ -120,7 +128,7 @@ main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .menu-item .price { color: var(--muted); }
 .menu-item .qty {
   position: absolute; top: -8px; right: -8px;
-  background: var(--accent); color: var(--accent-ink);
+  background: var(--orange); color: #fff;
   border-radius: 999px; min-width: 26px; height: 26px; padding: 0 6px;
   display: grid; place-items: center; font-weight: 800; font-size: .9rem;
 }
@@ -253,7 +261,7 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 }
 @media (max-width: 480px) {
   .topbar { gap: 8px; padding: 6px 10px; }
-  .brand { display: none; }
+  .brand { height: 40px; }
   .tabs button { padding: 8px 10px; font-size: .9rem; }
   main { padding: 12px; }
   .menu-grid { grid-template-columns: repeat(2, 1fr); }

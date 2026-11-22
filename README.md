@@ -1,4 +1,8 @@
-# Ledgr — lemonade & snacks POS
+# Mojo Dojo POS
+
+<img src="logo.png" alt="Mojo Dojo — Enter the snack dojo." height="120">
+
+Point of sale for Mojo Dojo, a lemonade & snacks stand.
 
 A simple point-of-sale that runs entirely in the browser. No server, no install, no account.
 Open `index.html` on a phone, tablet or laptop and start taking orders.
@@ -41,6 +45,6 @@ regularly. Use one device as the register.
 
 ## Hosting
 
-It's three static files (`index.html`, `styles.css`, `app.js`). You can open them directly, or host
+It's static files (`index.html`, `styles.css`, `app.js`, plus `logo.png` and `icon.png`). You can open them directly, or host
 them for free on GitHub Pages (repo Settings → Pages → deploy from branch) to get a URL you can
 bookmark or "Add to Home Screen" on a phone.

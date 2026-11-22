@@ -1,4 +1,4 @@
-/* Ledgr POS — lemonade & snacks. All data lives in this browser's localStorage. */
+/* Mojo Dojo POS — snacks & lemonade. All data lives in this browser's localStorage. */
 (() => {
   'use strict';
 
@@ -686,7 +686,7 @@
   });
   $('#exportBtn').addEventListener('click', async () => {
     const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
-    const filename = `ledgr-backup-${dayKey(Date.now())}.json`;
+    const filename = `mojo-dojo-backup-${dayKey(Date.now())}.json`;
     if (window.claude && window.claude.use) {
       const dl = await window.claude.use('downloads').catch(() => null);
       if (dl) {
@@ -697,7 +697,7 @@
     }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `ledgr-backup-${dayKey(Date.now())}.json`;
+    a.download = `mojo-dojo-backup-${dayKey(Date.now())}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
@@ -711,7 +711,7 @@
       if (!(await confirmDialog('Replace everything on this device with this backup?', 'Restore'))) return;
       db = { ...blank(), ...d };
       await replaceAll(); toast('Backup restored'); render();
-    } catch { toast('That file is not a Ledgr backup'); }
+    } catch { toast('That file is not a Mojo Dojo backup'); }
   });
   $('#resetBtn').addEventListener('click', async () => {
     if (!(await confirmDialog('Erase ALL orders, tabs and payments? Download a backup first if unsure.', 'Erase everything'))) return;
