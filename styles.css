@@ -268,3 +268,44 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
   .menu-row { grid-template-columns: 1fr 70px 44px; }
   .menu-row .cat-input { grid-column: 1 / -1; }
 }
+
+/* lock button in the header */
+.lock-btn { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; border: 0; background: rgba(255,255,255,.1); color: #fff3d6; cursor: pointer; }
+.lock-btn:hover { background: rgba(255,255,255,.2); }
+.field.inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.field.inline select { width: auto; margin-top: 0; }
+
+/* lock / idle screen */
+body.is-locked { overflow: hidden; }
+.lock {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background: radial-gradient(circle at 50% 35%, #3a2408 0%, var(--ink) 65%);
+  color: #fff3d6; cursor: pointer; user-select: none; -webkit-user-select: none;
+}
+.lock[hidden] { display: none; }
+.lock-logo { width: min(70vw, 420px); max-height: 55vh; object-fit: contain; animation: bob 3.2s ease-in-out infinite; filter: drop-shadow(0 10px 30px rgba(0,0,0,.5)); }
+.lock-hint { margin: 0; font-family: var(--display); font-size: 1.3rem; letter-spacing: .03em; color: var(--accent); animation: pulse 2.4s ease-in-out infinite; }
+.lock-pad { display: none; flex-direction: column; align-items: center; gap: 14px; cursor: default; }
+.lock.keypad-open .lock-pad { display: flex; }
+.lock.keypad-open .lock-hint { display: none; }
+.lock.keypad-open .lock-logo { width: min(40vw, 200px); max-height: 26vh; animation: none; }
+.lock-msg { margin: 0; font-weight: 700; min-height: 1.4em; text-align: center; }
+.lock-msg.err { color: #ff9b85; }
+.pin-dots { display: flex; gap: 12px; }
+.pin-dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--accent); }
+.pin-dots span.on { background: var(--accent); }
+.pin-dots.shake { animation: shake .35s; }
+.keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+.keypad button {
+  height: 72px; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgba(255,255,255,.1); color: #fff3d6; font-family: var(--display); font-size: 1.8rem;
+}
+.keypad button:active { background: var(--accent); color: var(--ink); }
+.keypad button.soft { font-family: inherit; font-size: .95rem; font-weight: 700; background: transparent; }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-10px) rotate(1deg); } }
+@keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+@media (prefers-reduced-motion: reduce) { .lock-logo, .lock-hint { animation: none; } }
+@media (max-height: 560px) { .keypad { grid-template-columns: repeat(3, 60px); } .keypad button { height: 56px; } }

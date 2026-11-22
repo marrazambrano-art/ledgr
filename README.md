@@ -37,14 +37,18 @@ Open `index.html` on a phone, tablet or laptop and start taking orders.
 | Extra Dip | Garlic Mayo       |  ₱20 |
 | Extra Dip | Chili Mayo        |  ₱15 |
 
-## Important: where your data lives
+## Lock screen
 
-All data is saved in the browser on the device you use (localStorage). It is **not** synced
-between devices, and clearing the browser's site data erases it. Use **Settings → Download backup**
-regularly. Use one device as the register.
+The register locks after a few idle minutes (default 2) and shows the Mojo Dojo logo. Tap it and enter the 6-digit PIN.
 
-## Hosting
+## Where your data lives
 
-It's static files (`index.html`, `styles.css`, `app.js`, plus `logo.png` and `icon.png`). You can open them directly, or host
-them for free on GitHub Pages (repo Settings → Pages → deploy from branch) to get a URL you can
-bookmark or "Add to Home Screen" on a phone.
+- **Website with Firebase** (recommended): orders sync across every device, and the PIN is checked by Firebase. See **[SETUP.md](SETUP.md)**.
+- **Website without Firebase** (`config.js` left as `null`): data stays in each device's browser, and the PIN is stored on that device.
+
+Use **Settings → Download backup** now and then either way.
+
+## Files
+
+`index.html`, `styles.css`, `app.js`, `config.js` (your Firebase settings), `logo.png`, `logo-large.png`, `icon.png`,
+`vendor/` (Firebase 10.12.2 library, shipped with the site), and `firestore.rules` (database security rules).

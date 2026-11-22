@@ -22,6 +22,9 @@
       <button data-view="settings">Settings</button>
     </nav>
     <span class="sync" id="syncState" data-state="wait"></span>
+    <button class="lock-btn" id="lockNow" aria-label="Lock the register" title="Lock">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 0 1 6 0v3H9Z"/></svg>
+    </button>
   </header>
 
   <main>
@@ -89,8 +92,27 @@
       <div id="menuEditor"></div>
       <button class="btn" id="addMenuItem">+ Add item</button>
 
+      <h2 class="mt">Lock &amp; PIN</h2>
+      <p class="muted small" id="securityNote"></p>
+      <div class="row-btns">
+        <label class="field inline">Lock when idle for
+          <select id="idleMin">
+            <option value="1">1 minute</option>
+            <option value="2">2 minutes</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="0">Never</option>
+          </select>
+        </label>
+      </div>
+      <div class="row-btns">
+        <button class="btn" id="changePinBtn">Change PIN</button>
+        <button class="btn danger" id="signOutBtn" hidden>Sign out this device</button>
+      </div>
+
       <h2 class="mt">Backup</h2>
-      <p class="muted small">Everything is saved on this device only. Download a backup now and then, and use it to move to a new device.</p>
+      <p class="muted small" id="backupNote">Everything is saved on this device only. Download a backup now and then, and use it to move to a new device.</p>
       <div class="row-btns">
         <button class="btn" id="exportBtn">Download backup</button>
         <label class="btn">Restore backup<input type="file" id="importFile" accept="application/json" hidden></label>
@@ -99,9 +121,25 @@
     </section>
   </main>
 
+  <div id="lock" class="lock" hidden>
+    <img class="lock-logo" src="logo-large.png" alt="Mojo Dojo — Enter the snack dojo.">
+    <p class="lock-hint">Tap anywhere to unlock</p>
+    <div class="lock-pad" role="group" aria-label="PIN keypad">
+      <p id="lockMsg" class="lock-msg" aria-live="polite">Enter PIN</p>
+      <div id="pinDots" class="pin-dots"></div>
+      <div class="keypad">
+        <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
+        <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
+        <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
+        <button data-key="clear" class="soft">Clear</button><button data-key="0">0</button><button data-key="back" class="soft" aria-label="Delete">⌫</button>
+      </div>
+    </div>
+  </div>
+
   <dialog id="modal"><form method="dialog" id="modalBody"></form></dialog>
   <div id="toast" class="toast"></div>
 
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

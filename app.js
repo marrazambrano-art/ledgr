@@ -97,19 +97,66 @@
     el.title = title || '';
     el.dataset.state = text === 'Synced' ? 'ok' : text === 'This device only' ? 'local' : 'wait';
   }
+  /* Where data lives:
+     'firebase' — the public website, synced through your Firebase project (config.js)
+     'claude'   — opened as a claude.ai artifact
+     'local'    — this browser only */
+  let backend = 'local';
+  let fbAuth = null;
+  const FB_VER = '10.12.2';
+  const PIN_EMAIL = () => window.MOJO_PIN_EMAIL || 'register@mojodojo.app';
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const el = document.createElement('script');
+      el.src = src; el.onload = res; el.onerror = () => rej(new Error('Could not load ' + src));
+      document.head.appendChild(el);
+    });
+  }
   async function connect() {
+    const cfg = window.MOJO_FIREBASE;
+    if (cfg && cfg.apiKey) return connectFirebase(cfg);
     const use = window.claude && window.claude.use;
     if (!use) { setSync('This device only', 'Saved in this browser. Download backups in Settings.'); return; }
     setSync('Connecting…');
     let ns = null;
     try { ns = await window.claude.use('db'); } catch { ns = null; }
     if (!ns) { setSync('This device only', 'Saved in this browser. Sign in to sync across devices.'); return; }
+    backend = 'claude';
+    startSync(ns);
+  }
+  async function connectFirebase(cfg) {
+    backend = 'firebase';
+    // nothing from a previous local-only setup should show before sign-in
+    db = blank();
+    setSync('Connecting…');
+    try {
+      for (const m of ['app', 'auth', 'firestore']) await loadScript(`vendor/firebase-${m}-compat.js`); // Firebase ${FB_VER}, shipped with the site
+    } catch (e) {
+      setSync('Offline', 'Could not reach the server. Check the internet connection and reload.');
+      lockMessage('No internet. Connect and reload the page.');
+      return;
+    }
+    const app = firebase.initializeApp(cfg);
+    const fs = app.firestore();
+    // keep working through short signal drops at the stand
+    try { await fs.enablePersistence({ synchronizeTabs: true }); } catch { /* another tab or unsupported browser */ }
+    fbAuth = app.auth();
+    let started = false;
+    fbAuth.onAuthStateChanged(user => {
+      if (user && !started) { started = true; startSync(fs); }
+      if (!user) {
+        setSync('Signed out', 'Enter the PIN to sign in.');
+        if (!lockState.locked) lockScreen(true);
+      }
+    });
+  }
+  function startSync(ns) {
     remote = ns;
     const confirmed = new Set();
     const timer = setTimeout(() => { if (confirmed.size < 4) setSync('Offline', 'Can\'t reach saved data yet. Changes will sync when back online.'); }, 10000);
     const ok = key => (snap) => {
       if (!snap.metadata.fromCache) confirmed.add(key);
-      if (confirmed.size === 4) { clearTimeout(timer); setSync('Synced', 'Saved online. Open this link on any device.'); }
+      if (confirmed.size === 4) { clearTimeout(timer); setSync('Synced', 'Saved online and shared with your other devices.'); }
     };
     const fail = e => { clearTimeout(timer); setSync('Offline', e && e.message); };
     for (const c of COLLS) {
@@ -216,7 +263,7 @@
     if (ui.view === 'orders') renderOrders();
     if (ui.view === 'tabs') renderTabs();
     if (ui.view === 'sales') renderSales();
-    if (ui.view === 'settings') renderSettings();
+    if (ui.view === 'settings') { renderSettings(); if (typeof renderSecurity === 'function') renderSecurity(); }
   }
   function renderActiveCount() {
     const n = db.orders.filter(o => !o.cancelled && !isDone(o)).length;
@@ -743,7 +790,7 @@
   function formDialog(title, fields, okLabel) {
     return openModal(`
       <h3>${esc(title)}</h3>
-      ${fields.map(f => `<label class="field">${esc(f.label)}<input data-k="${f.key}" value="${esc(f.value)}" ${f.required ? 'required' : ''} autocomplete="off"></label>`).join('')}
+      ${fields.map(f => `<label class="field">${esc(f.label)}<input data-k="${f.key}" value="${esc(f.value)}" ${f.required ? 'required' : ''} ${f.attrs || ''} autocomplete="off"></label>`).join('')}
       <div class="modal-actions">
         <button class="btn" type="button" id="mBack">Back</button>
         <button class="btn primary" type="submit" id="mOk">${esc(okLabel)}</button>
@@ -815,7 +862,198 @@
       });
   }
 
+  /* ---------- PIN lock & idle screen ----------
+     The register locks after a few idle minutes and shows the logo.
+     On the website the PIN is the password of your Firebase register
+     account, so Google checks it; elsewhere it's a PIN kept on this device. */
+  const LOCK_KEY = 'mojo-dojo-lock';
+  const PIN_LEN = 6;
+  const lockState = { locked: false, entry: '', mode: 'unlock', firstPin: null, fails: 0, waitUntil: 0, busy: false };
+  let lastActive = Date.now(), keypadShownAt = 0;
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } }
+  const lockPrefs = () => ({ idleMin: 2, ...(lsGet(LOCK_KEY) || {}) });
+  const setLockPrefs = p => lsSet(LOCK_KEY, { ...lockPrefs(), ...p });
+  async function hashPin(pin) {
+    const text = 'mojo-dojo:' + pin;
+    if (window.crypto && crypto.subtle) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    let h = 0; for (const c of text) h = (h * 31 + c.charCodeAt(0)) | 0; return 'x' + h;
+  }
+  function lockMessage(text, isError) {
+    const el = $('#lockMsg');
+    el.textContent = text;
+    el.classList.toggle('err', !!isError);
+  }
+  function renderDots() {
+    $('#pinDots').innerHTML = Array.from({ length: PIN_LEN }, (_, i) => `<span class="${i < lockState.entry.length ? 'on' : ''}"></span>`).join('');
+  }
+  function defaultLockText() {
+    if (lockState.mode === 'create') return 'Create a 6-digit PIN for this register';
+    if (lockState.mode === 'confirm') return 'Enter the same PIN again';
+    return backend === 'firebase' && !(fbAuth && fbAuth.currentUser) ? 'Enter the PIN to sign in' : 'Enter PIN';
+  }
+  function showKeypad(on) {
+    $('#lock').classList.toggle('keypad-open', on);
+    if (on) { keypadShownAt = Date.now(); lockState.entry = ''; renderDots(); lockMessage(defaultLockText()); }
+  }
+  function lockScreen(showPad = false) {
+    lockState.locked = true;
+    lockState.entry = '';
+    if (modal.open) modal.close();
+    $('#lock').hidden = false;
+    document.body.classList.add('is-locked');
+    showKeypad(showPad);
+  }
+  function unlock() {
+    lockState.locked = false;
+    lockState.fails = 0;
+    $('#lock').hidden = true;
+    document.body.classList.remove('is-locked');
+    lastActive = Date.now();
+  }
+  function wrongPin(text) {
+    lockState.fails++;
+    if (lockState.fails >= 5) { lockState.waitUntil = Date.now() + 30000; lockState.fails = 0; text = 'Too many tries. Wait 30 seconds.'; }
+    lockMessage(text || 'Wrong PIN. Try again.', true);
+    $('#pinDots').classList.remove('shake'); void $('#pinDots').offsetWidth; $('#pinDots').classList.add('shake');
+  }
+  async function submitPin(pin) {
+    const st = lockState;
+    if (st.mode === 'create') { st.firstPin = pin; st.mode = 'confirm'; lockMessage(defaultLockText()); return; }
+    if (st.mode === 'confirm') {
+      if (pin !== st.firstPin) { st.mode = 'create'; lockMessage('The PINs didn\'t match. Start again.', true); return; }
+      setLockPrefs({ pinHash: await hashPin(pin) });
+      st.mode = 'unlock'; unlock(); toast('PIN set. Use it to unlock the register.');
+      return;
+    }
+    if (Date.now() < st.waitUntil) { lockMessage('Too many tries. Wait a moment.', true); return; }
+    const h = await hashPin(pin);
+    const matchesSaved = lockPrefs().pinHash === h;
+    if (backend !== 'firebase') return matchesSaved ? unlock() : wrongPin();
+    // offline at the stand: accept the PIN this device last signed in with
+    if (matchesSaved && fbAuth && fbAuth.currentUser && navigator.onLine === false) return unlock();
+    if (!fbAuth) { lockMessage('Still connecting… try again in a moment.', true); return; }
+    lockMessage('Checking…');
+    try {
+      await fbAuth.signInWithEmailAndPassword(PIN_EMAIL(), pin);
+      setLockPrefs({ pinHash: h });
+      unlock();
+    } catch (e) {
+      const code = e && e.code || '';
+      if (code === 'auth/network-request-failed' && matchesSaved) return unlock();
+      if (code === 'auth/network-request-failed') return lockMessage('No internet. Connect and try again.', true);
+      if (code === 'auth/too-many-requests') return lockMessage('Too many tries. Wait a few minutes.', true);
+      if (code === 'auth/user-not-found') return lockMessage('The register account isn\'t set up yet (setup step 4).', true);
+      if (code === 'auth/operation-not-allowed') return lockMessage('Turn on Email/Password sign-in in Firebase (setup step 3).', true);
+      wrongPin();
+    }
+  }
+  async function pressKey(k) {
+    if (lockState.busy) return;
+    keypadShownAt = Date.now();
+    if (k === 'back') lockState.entry = lockState.entry.slice(0, -1);
+    else if (k === 'clear') lockState.entry = '';
+    else if (lockState.entry.length < PIN_LEN) lockState.entry += k;
+    renderDots();
+    if (lockState.entry.length === PIN_LEN) {
+      const pin = lockState.entry;
+      lockState.busy = true;
+      try { await submitPin(pin); } finally { lockState.busy = false; }
+      lockState.entry = ''; renderDots();
+    }
+  }
+  $('#lock').addEventListener('click', e => {
+    const k = e.target.closest('[data-key]');
+    if (k) return pressKey(k.dataset.key);
+    if (!$('#lock').classList.contains('keypad-open')) showKeypad(true);
+  });
+  document.addEventListener('keydown', e => {
+    if (!lockState.locked) return;
+    if (!$('#lock').classList.contains('keypad-open')) { showKeypad(true); if (!/^\d$/.test(e.key)) return; }
+    if (/^\d$/.test(e.key)) pressKey(e.key);
+    else if (e.key === 'Backspace') pressKey('back');
+    else if (e.key === 'Escape') pressKey('clear');
+  });
+  ['pointerdown', 'keydown', 'touchstart', 'wheel'].forEach(ev =>
+    document.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true, capture: true }));
+  setInterval(() => {
+    const now = Date.now();
+    if (lockState.locked) {
+      // back to the logo if someone opened the keypad and walked away
+      if ($('#lock').classList.contains('keypad-open') && lockState.mode === 'unlock' && now - keypadShownAt > 30000) showKeypad(false);
+      return;
+    }
+    const mins = +lockPrefs().idleMin;
+    if (mins > 0 && now - lastActive > mins * 60000 && lockEnabled()) lockScreen(false);
+  }, 5000);
+  function lockEnabled() {
+    return backend === 'firebase' || !!lockPrefs().pinHash;
+  }
+  $('#lockNow').addEventListener('click', () => {
+    if (!lockEnabled()) { toast('Set a PIN in Settings first'); show('settings'); return; }
+    lockScreen(false);
+  });
+
+  // Settings: lock & PIN
+  function renderSecurity() {
+    const p = lockPrefs();
+    $('#idleMin').value = String(p.idleMin);
+    $('#signOutBtn').hidden = backend !== 'firebase';
+    $('#changePinBtn').textContent = backend !== 'firebase' && !p.pinHash ? 'Set a PIN' : 'Change PIN';
+    $('#securityNote').textContent = backend === 'firebase'
+      ? 'The PIN is shared by everyone who runs the register. Changing it here changes it on every device.'
+      : 'The PIN is saved on this device only.';
+    $('#backupNote').textContent = backend === 'local'
+      ? 'Everything is saved on this device only. Download a backup now and then, and use it to move to a new device.'
+      : 'Orders are saved online and shared with your other devices. A backup file is still handy to keep.';
+  }
+  $('#idleMin').addEventListener('change', e => { setLockPrefs({ idleMin: +e.target.value }); toast('Saved'); });
+  $('#changePinBtn').addEventListener('click', async () => {
+    const pinAttrs = 'type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6"';
+    const hasPin = backend === 'firebase' || !!lockPrefs().pinHash;
+    const fields = [
+      ...(hasPin ? [{ key: 'cur', label: 'Current PIN', value: '', required: true, attrs: pinAttrs }] : []),
+      { key: 'next', label: 'New 6-digit PIN', value: '', required: true, attrs: pinAttrs },
+      { key: 'again', label: 'New PIN again', value: '', required: true, attrs: pinAttrs },
+    ];
+    const r = await formDialog(hasPin ? 'Change PIN' : 'Set a PIN', fields, 'Save PIN');
+    if (!r) return;
+    if (!/^\d{6}$/.test(r.next)) return toast('The PIN must be exactly 6 digits');
+    if (r.next !== r.again) return toast('The new PINs don\'t match');
+    if (backend === 'firebase') {
+      try {
+        const user = fbAuth.currentUser;
+        await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(PIN_EMAIL(), r.cur));
+        await user.updatePassword(r.next);
+      } catch (e) {
+        const code = e && e.code || '';
+        return toast(code.includes('wrong-password') || code.includes('invalid') ? 'Current PIN is wrong' : 'Could not change the PIN. Check the internet.');
+      }
+    } else if (hasPin && lockPrefs().pinHash !== await hashPin(r.cur)) {
+      return toast('Current PIN is wrong');
+    }
+    setLockPrefs({ pinHash: await hashPin(r.next) });
+    renderSecurity();
+    toast('PIN changed');
+  });
+  $('#signOutBtn').addEventListener('click', async () => {
+    if (!(await confirmDialog('Sign this device out? You\'ll need the PIN to sign in again.', 'Sign out'))) return;
+    setLockPrefs({ pinHash: null });
+    await fbAuth.signOut();
+    location.reload();
+  });
+
   /* ---------- boot ---------- */
   render();
-  connect();
+  // on the website, cover everything with the logo before any data loads
+  if (window.MOJO_FIREBASE && window.MOJO_FIREBASE.apiKey) lockScreen(false);
+  connect().then(() => {
+    renderSecurity();
+    if (backend === 'firebase') { if (!lockState.locked) lockScreen(false); }
+    else if (lockPrefs().pinHash) lockScreen(false);
+    else if (backend === 'local' && lsSet('mojo-dojo-probe', 1)) { lockState.mode = 'create'; lockScreen(true); }
+  });
 })();
