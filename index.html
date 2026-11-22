@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4c430">
+  <title>Ledgr POS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🍋 Ledgr</div>
+    <nav class="tabs" id="nav">
+      <button data-view="order" class="active">New order</button>
+      <button data-view="orders">Orders <span class="pill" id="activeCount"></span></button>
+      <button data-view="tabs">Tabs</button>
+      <button data-view="sales">Sales</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- NEW ORDER -->
+    <section id="view-order" class="view active">
+      <div class="order-layout">
+        <div class="menu" id="menu"></div>
+        <aside class="cart">
+          <h2>Current order</h2>
+          <div id="cartItems" class="cart-items"></div>
+          <div class="cart-total"><span>Total</span><strong id="cartTotal">₱0</strong></div>
+          <label class="field">Customer name <span class="muted">(optional)</span>
+            <input id="customerName" type="text" placeholder="e.g. Ana" autocomplete="off">
+          </label>
+          <label class="field">Put on a tab?
+            <select id="tabSelect"></select>
+          </label>
+          <label class="field">Note <span class="muted">(optional)</span>
+            <input id="orderNote" type="text" placeholder="e.g. less ice" autocomplete="off">
+          </label>
+          <div class="cart-actions" id="cartActions"></div>
+          <button class="link" id="clearCart">Clear order</button>
+        </aside>
+      </div>
+      <button class="cart-bar" id="cartBar"><span id="cartBarText"></span><span>View order ↓</span></button>
+    </section>
+
+    <!-- ORDERS BOARD -->
+    <section id="view-orders" class="view">
+      <div class="toolbar">
+        <div class="seg" id="orderFilter">
+          <button data-f="active" class="active">Open</button>
+          <button data-f="done">Completed</button>
+          <button data-f="all">All</button>
+        </div>
+        <input id="orderSearch" type="search" placeholder="Search name or #">
+      </div>
+      <p class="muted small">An order is completed once it's <b>Made</b>, <b>Paid</b> and <b>Given</b>. Tap a status to change it.</p>
+      <div id="ordersList" class="cards"></div>
+    </section>
+
+    <!-- TABS -->
+    <section id="view-tabs" class="view">
+      <div class="toolbar">
+        <h2>Customer tabs</h2>
+        <button class="btn primary" id="newTabBtn">+ New tab</button>
+      </div>
+      <div id="tabsList" class="cards"></div>
+      <div id="tabDetail"></div>
+    </section>
+
+    <!-- SALES -->
+    <section id="view-sales" class="view">
+      <div class="toolbar">
+        <h2>Sales</h2>
+        <input type="date" id="salesDate">
+      </div>
+      <div id="salesBody"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <h2>Menu</h2>
+      <p class="muted small">Change names and prices here. Old orders keep the price they were sold at.</p>
+      <div id="menuEditor"></div>
+      <button class="btn" id="addMenuItem">+ Add item</button>
+
+      <h2 class="mt">Backup</h2>
+      <p class="muted small">Everything is saved on this device only. Download a backup now and then, and use it to move to a new device.</p>
+      <div class="row-btns">
+        <button class="btn" id="exportBtn">Download backup</button>
+        <label class="btn">Restore backup<input type="file" id="importFile" accept="application/json" hidden></label>
+        <button class="btn danger" id="resetBtn">Erase all data</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="modal"><form method="dialog" id="modalBody"></form></dialog>
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
