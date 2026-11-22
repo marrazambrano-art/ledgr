@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a1208">
+  <title>Mojo Dojo POS</title>
+  <link rel="icon" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <img class="brand" src="logo.png" alt="Mojo Dojo">
+    <nav class="tabs" id="nav">
+      <button data-view="order" class="active">New order</button>
+      <button data-view="orders">Orders <span class="pill" id="activeCount"></span></button>
+      <button data-view="tabs">Tabs</button>
+      <button data-view="sales">Sales</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+    <span class="sync" id="syncState" data-state="wait"></span>
+    <button class="lock-btn" id="lockNow" aria-label="Lock the register" title="Lock">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 0 1 6 0v3H9Z"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- NEW ORDER -->
+    <section id="view-order" class="view active">
+      <div class="order-layout">
+        <div class="menu" id="menu"></div>
+        <aside class="cart">
+          <h2>Current order</h2>
+          <div id="cartItems" class="cart-items"></div>
+          <div class="cart-total"><span>Total</span><strong id="cartTotal">₱0</strong></div>
+          <label class="field">Customer name <span class="muted">(optional)</span>
+            <input id="customerName" type="text" placeholder="e.g. Ana" autocomplete="off">
+          </label>
+          <label class="field">Put on a tab?
+            <select id="tabSelect"></select>
+          </label>
+          <label class="field">Note <span class="muted">(optional)</span>
+            <input id="orderNote" type="text" placeholder="e.g. less ice" autocomplete="off">
+          </label>
+          <div class="cart-actions" id="cartActions"></div>
+          <button class="link" id="clearCart">Clear order</button>
+        </aside>
+      </div>
+      <button class="cart-bar" id="cartBar"><span id="cartBarText"></span><span>View order ↓</span></button>
+    </section>
+
+    <!-- ORDERS BOARD -->
+    <section id="view-orders" class="view">
+      <div class="toolbar">
+        <div class="seg" id="orderFilter">
+          <button data-f="active" class="active">Open</button>
+          <button data-f="done">Completed</button>
+          <button data-f="all">All</button>
+        </div>
+        <input id="orderSearch" type="search" placeholder="Search name or #">
+      </div>
+      <p class="muted small">An order is completed once it's <b>Made</b>, <b>Paid</b> and <b>Given</b>. Tick each box as a portion is prepared, or tap <b>Made</b> to mark the whole order.</p>
+      <div id="ordersList" class="cards"></div>
+    </section>
+
+    <!-- TABS -->
+    <section id="view-tabs" class="view">
+      <div class="toolbar">
+        <h2>Customer tabs</h2>
+        <button class="btn primary" id="newTabBtn">+ New tab</button>
+      </div>
+      <div id="tabsList" class="cards"></div>
+      <div id="tabDetail"></div>
+    </section>
+
+    <!-- SALES -->
+    <section id="view-sales" class="view">
+      <div class="toolbar">
+        <h2>Sales</h2>
+        <input type="date" id="salesDate">
+      </div>
+      <div id="salesBody"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <h2>Menu</h2>
+      <p class="muted small">Change names and prices here. Old orders keep the price they were sold at.</p>
+      <div id="menuEditor"></div>
+      <button class="btn" id="addMenuItem">+ Add item</button>
+
+      <h2 class="mt">Lock &amp; PIN</h2>
+      <p class="muted small" id="securityNote"></p>
+      <div class="row-btns">
+        <label class="field inline">Lock when idle for
+          <select id="idleMin">
+            <option value="1">1 minute</option>
+            <option value="2">2 minutes</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="0">Never</option>
+          </select>
+        </label>
+      </div>
+      <div class="row-btns">
+        <button class="btn" id="changePinBtn">Change PIN</button>
+        <button class="btn danger" id="signOutBtn" hidden>Sign out this device</button>
+      </div>
+
+      <h2 class="mt">Backup</h2>
+      <p class="muted small" id="backupNote">Everything is saved on this device only. Download a backup now and then, and use it to move to a new device.</p>
+      <div class="row-btns">
+        <button class="btn" id="exportBtn">Download backup</button>
+        <label class="btn">Restore backup<input type="file" id="importFile" accept="application/json" hidden></label>
+        <button class="btn danger" id="resetBtn">Erase all data</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="lock" class="lock" hidden>
+    <img class="lock-logo" src="logo-large.png" alt="Mojo Dojo — Enter the snack dojo.">
+    <p class="lock-hint">Tap anywhere to unlock</p>
+    <div class="lock-pad" role="group" aria-label="PIN keypad">
+      <p id="lockMsg" class="lock-msg" aria-live="polite">Enter PIN</p>
+      <div id="pinDots" class="pin-dots"></div>
+      <div class="keypad">
+        <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
+        <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
+        <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
+        <button data-key="clear" class="soft">Clear</button><button data-key="0">0</button><button data-key="back" class="soft" aria-label="Delete">⌫</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="modal"><form method="dialog" id="modalBody"></form></dialog>
+  <div id="toast" class="toast"></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
