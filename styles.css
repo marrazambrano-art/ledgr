@@ -169,7 +169,16 @@ main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .badge.red { background: var(--red-bg); color: var(--red); }
 .badge.green { background: var(--green-bg); color: var(--green); }
 .items { margin: 0; padding: 0; list-style: none; font-size: .95rem; }
-.items li { display: flex; justify-content: space-between; gap: 8px; }
+.items li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; }
+.item-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ticks { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.ticks:empty { display: none; }
+.tick {
+  width: 32px; height: 32px; border-radius: 8px; border: 2px solid var(--line);
+  background: var(--surface); color: #fff; font-weight: 800; cursor: pointer; padding: 0;
+}
+.tick.on { background: var(--green); border-color: var(--green); }
+.item-done .item-label { color: var(--muted); text-decoration: line-through; }
 .note { background: var(--amber-bg); padding: 6px 8px; border-radius: 8px; font-size: .9rem; }
 .card-total { display: flex; justify-content: space-between; font-weight: 700; }
 .status-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -182,6 +191,7 @@ main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .status.on { background: var(--green-bg); border-color: var(--green); color: var(--green); }
 .status.tab { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
 .status.off { color: var(--muted); }
+.status.part { background: var(--amber-bg); border-color: #d9a400; color: var(--text); }
 .card-foot { display: flex; justify-content: space-between; align-items: center; font-size: .85rem; }
 
 /* tabs */

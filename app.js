@@ -182,6 +182,20 @@
     return !!o.paidAt;
   }
   const isDone = o => !o.cancelled && o.made && o.given && isPaid(o);
+  /* Per-item progress: how many of each line are prepared. Older orders
+     without a count follow the order's Made flag. */
+  const doneCount = (o, it) => Math.min(it.qty, it.done ?? (o.made ? it.qty : 0));
+  const madeProgress = o => {
+    let done = 0, total = 0;
+    for (const it of o.items) { done += doneCount(o, it); total += it.qty; }
+    return { done, total };
+  };
+  function setItemDone(o, idx, n) {
+    o.items.forEach((it, i) => { it.done = doneCount(o, it); });
+    const it = o.items[idx];
+    it.done = Math.max(0, Math.min(it.qty, n));
+    o.made = o.items.every(x => x.done >= x.qty);
+  }
 
   /* ---------- navigation ---------- */
   function show(view) {
@@ -369,12 +383,17 @@
             ${tab ? `<span class="badge">Tab: ${esc(tab.name)}</span>` : ''}
           </div>
         </div>
-        <ul class="items">${o.items.map(i => `<li><span>${i.qty} × ${esc(i.name)}</span><span>${peso(i.price * i.qty)}</span></li>`).join('')}</ul>
+        <ul class="items">${o.items.map((i, idx) => {
+          const d = doneCount(o, i);
+          const boxes = o.cancelled ? '' : Array.from({ length: i.qty }, (_, k) =>
+            `<button class="tick ${k < d ? 'on' : ''}" data-act="tick" data-id="${o.id}" data-idx="${idx}" data-k="${k}" aria-label="${esc(i.name)} ${k + 1} ${k < d ? 'done' : 'not done'}">${k < d ? '✓' : ''}</button>`).join('');
+          return `<li class="${!o.cancelled && d >= i.qty ? 'item-done' : ''}"><span class="item-name"><span class="ticks">${boxes}</span><span class="item-label">${i.qty} × ${esc(i.name)}</span></span><span>${peso(i.price * i.qty)}</span></li>`;
+        }).join('')}</ul>
         ${o.note ? `<div class="note">📝 ${esc(o.note)}</div>` : ''}
         <div class="card-total"><span>Total</span><span>${peso(o.total)}</span></div>
         ${o.cancelled ? '' : `
         <div class="status-row">
-          <button class="status ${o.made ? 'on' : 'off'}" data-act="made" data-id="${o.id}"><span class="ico">${o.made ? '✓' : '🍳'}</span>${o.made ? 'Made' : 'Not made'}</button>
+          ${(() => { const p = madeProgress(o); return `<button class="status ${o.made ? 'on' : p.done ? 'part' : 'off'}" data-act="made" data-id="${o.id}"><span class="ico">${o.made ? '✓' : p.done ? p.done + '/' + p.total : '🍳'}</span>${o.made ? 'Made' : p.done ? 'Partly made' : 'Not made'}</button>`; })()}
           ${paidBtn}
           <button class="status ${o.given ? 'on' : 'off'}" data-act="given" data-id="${o.id}"><span class="ico">${o.given ? '✓' : '🤲'}</span>${o.given ? 'Given' : 'Not given'}</button>
         </div>`}
@@ -399,10 +418,21 @@
       : `<div class="empty">${ui.orderFilter === 'active' ? 'No open orders. 🎉' : 'Nothing here yet.'}</div>`;
   }
 
-  async function handleOrderAction(act, id) {
+  async function handleOrderAction(act, id, btn) {
     const o = db.orders.find(x => x.id === id);
     if (!o) return;
-    if (act === 'made') o.made = !o.made;
+    if (act === 'made') {
+      // the big button marks everything made (or, if all made, undoes it)
+      const all = !o.made;
+      o.items.forEach(it => { it.done = all ? it.qty : 0; });
+      o.made = all;
+    }
+    if (act === 'tick') {
+      const idx = +btn.dataset.idx, k = +btn.dataset.k;
+      const cur = doneCount(o, o.items[idx]);
+      // each box is one portion: tap an empty box = one more done, tap a ticked box = one fewer
+      setItemDone(o, idx, k < cur ? cur - 1 : cur + 1);
+    }
     if (act === 'given') o.given = !o.given;
     if (act === 'paid') {
       if (o.tabId) {
@@ -431,7 +461,7 @@
   }
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
-    if (b && b.closest('#ordersList, #tabDetail')) handleOrderAction(b.dataset.act, b.dataset.id);
+    if (b && b.closest('#ordersList, #tabDetail')) handleOrderAction(b.dataset.act, b.dataset.id, b);
   });
 
   /* ---------- TABS ---------- */
